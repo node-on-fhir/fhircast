@@ -3,10 +3,8 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
-import {
-  Button,
-  ButtonGroup
-} from '@mui/material';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
 
 import {
   Settings as SettingsIcon,
@@ -18,54 +16,49 @@ import {
 // FHIRCAST NAV BUTTONS
 // =============================================================================
 
+var footerRoutes = [
+  { label: 'Config', path: '/fhircast-config', icon: SettingsIcon },
+  { label: 'Subscribe', path: '/fhircast-subscribe', icon: SubscriptionsIcon },
+  { label: 'Publish', path: '/fhircast-publish', icon: PublishIcon }
+];
+
 function FhircastNavButtons() {
   var navigate = useNavigate();
   var location = useLocation();
-  var currentPath = location.pathname;
-
-  function handleNavigate(path) {
-    if (currentPath !== path) {
-      navigate(path);
-    }
-  }
 
   return (
-    <ButtonGroup
-      variant="contained"
-      aria-label="fhircast navigation buttons"
-      sx={{ width: '100%' }}
-    >
-      <Button
-        id="fhircastConfigButton"
-        color={currentPath === '/fhircast-config' ? 'primary' : 'inherit'}
-        onClick={function() { handleNavigate('/fhircast-config'); }}
-        startIcon={<SettingsIcon />}
-        disabled={currentPath === '/fhircast-config'}
-        sx={{ flex: 1 }}
-      >
-        Config
-      </Button>
-      <Button
-        id="fhircastSubscribeButton"
-        color={currentPath === '/fhircast-subscribe' ? 'primary' : 'inherit'}
-        onClick={function() { handleNavigate('/fhircast-subscribe'); }}
-        startIcon={<SubscriptionsIcon />}
-        disabled={currentPath === '/fhircast-subscribe'}
-        sx={{ flex: 1 }}
-      >
-        Subscribe
-      </Button>
-      <Button
-        id="fhircastPublishButton"
-        color={currentPath === '/fhircast-publish' ? 'primary' : 'inherit'}
-        onClick={function() { handleNavigate('/fhircast-publish'); }}
-        startIcon={<PublishIcon />}
-        disabled={currentPath === '/fhircast-publish'}
-        sx={{ flex: 1 }}
-      >
-        Publish
-      </Button>
-    </ButtonGroup>
+    <Box sx={{
+      display: 'flex',
+      flexDirection: 'row',
+      justifyContent: 'space-evenly',
+      alignItems: 'center',
+      width: '100%'
+    }}>
+      {footerRoutes.map(function(route) {
+        var isActive = location.pathname === route.path;
+        var IconComponent = route.icon;
+
+        return (
+          <Button
+            key={route.path}
+            id={'fhircast' + route.label + 'Button'}
+            variant={isActive ? 'contained' : 'text'}
+            color={isActive ? 'secondary' : 'inherit'}
+            size="small"
+            startIcon={<IconComponent />}
+            onClick={function() { navigate(route.path); }}
+            sx={{
+              textTransform: 'none',
+              minWidth: 0,
+              px: 1.5,
+              fontSize: '0.75rem'
+            }}
+          >
+            {route.label}
+          </Button>
+        );
+      })}
+    </Box>
   );
 }
 

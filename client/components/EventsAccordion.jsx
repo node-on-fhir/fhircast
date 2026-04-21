@@ -18,7 +18,7 @@ function groupEventsByType(events) {
   var groups = {};
 
   events.forEach(function(evt) {
-    var eventName = get(evt, 'event[hub.event]', get(evt, 'event.hub\\.event', 'unknown'));
+    var eventName = get(evt, 'event.hub_event') || get(evt, 'event[hub.event]', 'unknown');
     if (!groups[eventName]) {
       groups[eventName] = [];
     }
@@ -35,7 +35,7 @@ function groupEventsByType(events) {
 function EventItem({ evt, severity }) {
   const [expanded, setExpanded] = useState(false);
 
-  var eventTopic = get(evt, 'event[hub.topic]', get(evt, 'event.hub\\.topic', ''));
+  var eventTopic = get(evt, 'event.hub_topic') || get(evt, 'event[hub.topic]', '');
   var eventId = get(evt, 'id', '');
   var timestamp = get(evt, 'timestamp', '');
 

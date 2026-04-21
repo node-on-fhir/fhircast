@@ -3,6 +3,29 @@
 import { Meteor } from 'meteor/meteor';
 import { check, Match } from 'meteor/check';
 import { fetch } from 'meteor/fetch';
+import { get, set } from 'lodash';
+import { AllLifecycleEvents } from '../../record-lifecycle/lib/RecordLifecycleEvents';
+import { FhircastEvents } from '../lib/FhircastEvents';
+
+// =============================================================================
+// HELPERS
+// =============================================================================
+
+/**
+ * Recursively replace dots in object keys with underscores.
+ * MongoDB/Minimongo forbid dots in field names; FHIRcast STU3 wire format
+ * uses keys like "hub.topic" and "hub.event".
+ */
+function sanitizeDottedKeys(obj) {
+  if (obj === null || typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) return obj.map(sanitizeDottedKeys);
+  var result = {};
+  Object.keys(obj).forEach(function(key) {
+    var safeKey = key.replace(/\./g, '_');
+    result[safeKey] = sanitizeDottedKeys(obj[key]);
+  });
+  return result;
+}
 
 // =============================================================================
 // METEOR METHODS (Meteor v3 Async Pattern)
@@ -159,15 +182,83 @@ Meteor.methods({
    * @param {Object} eventData - Event to publish
    * @returns {Object} Response from the hub
    */
-  'fhircast.publishEvent': async function(hubUrl, eventData) {
-    check(hubUrl, String);
-    check(eventData, Object);
+  /**
+   * Get FHIRcast publish config for all eligible resource types
+   * @returns {Object} Map of resourceType → fhircast config
+   */
+  'fhircast.getPublishConfig': async function() {
+    if (!this.userId) {
+      throw new Meteor.Error('not-authorized', 'You must be logged in');
+    }
+
+    console.log('[fhircast.getPublishConfig] Reading publish config');
+
+    var eligibleTypes = ['Patient', 'ImagingStudy', 'DiagnosticReport', 'Encounter'];
+    var config = {};
+
+    eligibleTypes.forEach(function(resourceType) {
+      var fhircastConfig = get(Meteor, 'settings.private.fhir.rest.' + resourceType + '.fhircast', null);
+      config[resourceType] = fhircastConfig || { publish: false, events: [] };
+    });
+
+    return config;
+  },
+
+  /**
+   * Set FHIRcast config for a specific resource type (in-memory, lost on restart)
+   * @param {String} resourceType - The FHIR resource type
+   * @param {Object} config - The fhircast config { publish: Boolean, events: String[] }
+   * @returns {Object} Updated config
+   */
+  'fhircast.setResourceFhircast': async function(resourceType, config) {
+    check(resourceType, String);
+    check(config, Object);
 
     if (!this.userId) {
       throw new Meteor.Error('not-authorized', 'You must be logged in');
     }
 
+    var eligibleTypes = ['Patient', 'ImagingStudy', 'DiagnosticReport', 'Encounter'];
+    if (eligibleTypes.indexOf(resourceType) === -1) {
+      throw new Meteor.Error('invalid-resource', 'Resource type ' + resourceType + ' is not FHIRcast-eligible. Must be one of: ' + eligibleTypes.join(', '));
+    }
+
+    // Validate events if provided
+    if (config.events && Array.isArray(config.events)) {
+      var invalidEvents = config.events.filter(function(evt) {
+        return AllLifecycleEvents.indexOf(evt) === -1;
+      });
+      if (invalidEvents.length > 0) {
+        throw new Meteor.Error('invalid-events', 'Invalid lifecycle events: ' + invalidEvents.join(', '));
+      }
+    }
+
+    var settingsPath = 'settings.private.fhir.rest.' + resourceType + '.fhircast';
+    console.log('[fhircast.setResourceFhircast] Updating', settingsPath, config);
+
+    set(Meteor, settingsPath, config);
+
+    return config;
+  },
+
+  /**
+   * Forward event publication to hub
+   * @param {String} hubUrl - The hub URL
+   * @param {Object} eventData - Event to publish
+   * @returns {Object} Response from the hub
+   */
+  'fhircast.publishEvent': async function(hubUrl, eventData) {
+    check(hubUrl, String);
+    check(eventData, Object);
+
+    if (!this.userId && this.connection) {
+      throw new Meteor.Error('not-authorized', 'You must be logged in');
+    }
+
     console.log('[fhircast.publishEvent] Publishing event to hub:', hubUrl);
+
+    var hubSuccess = false;
+    var hubStatus = null;
 
     try {
       var response = await fetch(hubUrl, {
@@ -176,19 +267,58 @@ Meteor.methods({
         body: JSON.stringify(eventData)
       });
 
-      var statusCode = response.status;
-      console.log('[fhircast.publishEvent] Hub response status:', statusCode);
-
-      return {
-        success: statusCode >= 200 && statusCode < 300,
-        status: statusCode,
-        timestamp: new Date().toISOString()
-      };
+      hubStatus = response.status;
+      hubSuccess = hubStatus >= 200 && hubStatus < 300;
+      console.log('[fhircast.publishEvent] Hub response status:', hubStatus);
     } catch (error) {
-      console.error('[fhircast.publishEvent] Error:', error.message);
-      throw new Meteor.Error('hub-error', 'Failed to publish event: ' + error.message);
+      console.warn('[fhircast.publishEvent] Hub unreachable:', error.message);
     }
+
+    // Always store the event via DDP so clients receive it regardless of hub status
+    try {
+      await FhircastEvents.insertAsync(Object.assign({}, sanitizeDottedKeys(eventData), {
+        _receivedAt: new Date().toISOString(),
+        _source: 'server-bridge'
+      }));
+      console.log('[fhircast.publishEvent] Event stored in FhircastEvents collection');
+    } catch (insertError) {
+      console.error('[fhircast.publishEvent] Failed to store event:', insertError.message);
+    }
+
+    return {
+      success: hubSuccess,
+      status: hubStatus,
+      timestamp: new Date().toISOString()
+    };
   }
+});
+
+// =============================================================================
+// PUBLICATIONS
+// =============================================================================
+
+Meteor.publish('fhircast.events', function() {
+  var self = this;
+
+  var handle = FhircastEvents.find({}, {
+    sort: { _receivedAt: -1 },
+    limit: 200
+  }).observeChanges({
+    added: function(id, fields) {
+      self.added('FhircastEvents', id, sanitizeDottedKeys(fields));
+    },
+    changed: function(id, fields) {
+      self.changed('FhircastEvents', id, sanitizeDottedKeys(fields));
+    },
+    removed: function(id) {
+      self.removed('FhircastEvents', id);
+    }
+  });
+
+  self.ready();
+  self.onStop(function() {
+    handle.stop();
+  });
 });
 
 console.log('[fhircast-module] Server methods registered');

@@ -6,6 +6,7 @@ import FhircastSubscribePage from './client/FhircastSubscribePage.jsx';
 import FhircastPublishPage from './client/FhircastPublishPage.jsx';
 import FhircastNavButtons from './client/components/FhircastNavButtons.jsx';
 import CollectionsToPublish from './client/components/CollectionsToPublish.jsx';
+import { FhircastEvents } from './lib/FhircastEvents';
 import workflowConfig from './workflow.json';
 
 // =============================================================================

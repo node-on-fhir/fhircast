@@ -3,20 +3,33 @@
 import React, { useState } from 'react';
 import {
   Card, CardHeader, CardContent,
-  TextField, Button, Box, Alert, Typography,
-  FormControl, InputLabel, Select, MenuItem
+  TextField, Button, Box, Typography,
+  FormControl, InputLabel, Select, MenuItem, ListSubheader
 } from '@mui/material';
 import { Random } from 'meteor/random';
 
 import { EventType } from '../lib/types.js';
 import { DEFAULT_TOPIC, DEFAULT_CONTEXT } from '../lib/constants.js';
+import {
+  LifecycleToFhircast,
+  AllLifecycleEvents
+} from '../../../record-lifecycle/lib/RecordLifecycleEvents';
 
 // =============================================================================
-// PUBLISH EVENT
+// CONSTANTS
 // =============================================================================
 
 var EVENT_EVENT = 'hub.event';
 var EVENT_TOPIC = 'hub.topic';
+
+// Lifecycle events that have a FHIRcast mapping
+var PUBLISHABLE_LIFECYCLE_EVENTS = AllLifecycleEvents.filter(function(evt) {
+  return LifecycleToFhircast[evt] !== null && LifecycleToFhircast[evt] !== undefined;
+});
+
+// =============================================================================
+// PUBLISH EVENT
+// =============================================================================
 
 function PublishEvent({ isPublishAllowed, onPublishEvent }) {
   const [eventName, setEventName] = useState(EventType.PatientOpen);
@@ -49,9 +62,29 @@ function PublishEvent({ isPublishAllowed, onPublishEvent }) {
       return;
     }
 
+    var resolvedEventName = eventName;
+
+    // If a lifecycle event was selected, resolve to FHIRcast event name
+    if (AllLifecycleEvents.indexOf(eventName) !== -1) {
+      var fhircastAction = LifecycleToFhircast[eventName];
+      if (fhircastAction) {
+        // Try to infer resource type from context
+        var parsedCtx = JSON.parse(contextString);
+        var resourceType = '';
+        if (Array.isArray(parsedCtx) && parsedCtx.length > 0) {
+          resourceType = (parsedCtx[0].resource && parsedCtx[0].resource.resourceType) || '';
+        }
+        if (resourceType) {
+          resolvedEventName = resourceType.toLowerCase() + '-' + fhircastAction;
+        } else {
+          resolvedEventName = 'patient-' + fhircastAction;
+        }
+      }
+    }
+
     var evt = {};
     evt[EVENT_TOPIC] = topic;
-    evt[EVENT_EVENT] = eventName;
+    evt[EVENT_EVENT] = resolvedEventName;
     evt.context = JSON.parse(contextString);
 
     var id = Random.id();
@@ -67,6 +100,39 @@ function PublishEvent({ isPublishAllowed, onPublishEvent }) {
 
   var isContextInvalid = Boolean(contextError);
   var isPublishDisabled = !isPublishAllowed || isContextInvalid;
+
+  // Build menu items with grouped sections
+  function renderEventMenuItems() {
+    var items = [];
+
+    // FHIRcast Events group
+    items.push(
+      <ListSubheader key="fhircast-header" sx={{ bgcolor: 'background.paper', fontWeight: 'bold' }}>
+        FHIRcast Events
+      </ListSubheader>
+    );
+    Object.values(EventType).forEach(function(value) {
+      items.push(
+        <MenuItem key={value} value={value}>{value}</MenuItem>
+      );
+    });
+
+    // Lifecycle Events group
+    items.push(
+      <ListSubheader key="lifecycle-header" sx={{ bgcolor: 'background.paper', fontWeight: 'bold' }}>
+        Lifecycle Events
+      </ListSubheader>
+    );
+    PUBLISHABLE_LIFECYCLE_EVENTS.forEach(function(evt) {
+      var fhircastAction = LifecycleToFhircast[evt];
+      var label = evt + ' \u2192 ' + fhircastAction;
+      items.push(
+        <MenuItem key={'lifecycle-' + evt} value={evt}>{label}</MenuItem>
+      );
+    });
+
+    return items;
+  }
 
   return (
     <Card sx={{ mb: 2, bgcolor: 'background.paper' }}>
@@ -99,11 +165,7 @@ function PublishEvent({ isPublishAllowed, onPublishEvent }) {
               label="Event"
               onChange={function(e) { setEventName(e.target.value); }}
             >
-              {Object.values(EventType).map(function(value) {
-                return (
-                  <MenuItem key={value} value={value}>{value}</MenuItem>
-                );
-              })}
+              {renderEventMenuItems()}
             </Select>
           </FormControl>
           <TextField
