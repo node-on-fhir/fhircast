@@ -6,8 +6,8 @@ import {
   TextField, Button, Box, Alert, Autocomplete, Chip,
   CircularProgress
 } from '@mui/material';
+import { Meteor } from 'meteor/meteor';
 import { get } from 'lodash';
-import { fetch } from 'meteor/fetch';
 
 import SubscriptionList from './SubscriptionList.jsx';
 import { SubscriptionParams, SubscriptionMode, EventType } from '../lib/types.js';
@@ -53,20 +53,19 @@ function isSuccessStatus(status) {
   return status && status >= 200 && status < 300;
 }
 
-async function sendSubscription(url, subscription) {
+async function sendSubscription(url, subscription, authorization) {
   var payload = Object.assign({}, subscription);
 
   if (Array.isArray(payload['hub.events'])) {
     payload['hub.events'] = payload['hub.events'].join(',');
   }
 
+  var mode = payload['hub.mode'];
+  var methodName = mode === 'unsubscribe' ? 'fhircast.unsubscribe' : 'fhircast.subscribe';
+
   try {
-    var response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    return { status: response.status };
+    var result = await Meteor.callAsync(methodName, url, payload, authorization);
+    return { status: result.status };
   } catch (error) {
     console.error('[fhircast] Subscription error:', error);
     return null;
@@ -80,6 +79,7 @@ async function sendSubscription(url, subscription) {
 function SubscriptionPanel({ wsEndpoint, onSubscriptionsChange }) {
   const [subscription, setSubscription] = useState(INITIAL_SUB);
   const [hubUrl, setHubUrl] = useState(DEFAULT_HUB_URL);
+  const [authorization, setAuthorization] = useState('');
   const [clientUrl, setClientUrl] = useState(DEFAULT_CLIENT_URL);
   const [subscriptions, setSubscriptions] = useState({});
   const [error, setError] = useState(null);
@@ -96,7 +96,7 @@ function SubscriptionPanel({ wsEndpoint, onSubscriptionsChange }) {
       [SubscriptionParams.callback]: clientUrl,
       [SubscriptionParams.mode]: mode,
       [SubscriptionParams.channelEndpoint]: wsEndpoint
-    })).then(function(response) {
+    }), authorization).then(function(response) {
       setError(getError(response));
       setStatus(SubscriptionStatus.Idle);
 
@@ -137,7 +137,7 @@ function SubscriptionPanel({ wsEndpoint, onSubscriptionsChange }) {
 
   function addOrUpdateSub(sub) {
     var result = Object.assign({}, subscriptions);
-    result[sub.topic] = sub;
+    result[sub.topic] = Object.assign({}, sub, { status: 'active' });
     return result;
   }
 
@@ -204,6 +204,17 @@ function SubscriptionPanel({ wsEndpoint, onSubscriptionsChange }) {
               value={hubUrl}
               onChange={function(e) { setHubUrl(e.target.value); }}
               disabled={hasSubscriptions}
+              sx={{ mb: 2 }}
+            />
+            <TextField
+              id="authorizationInput"
+              fullWidth
+              label="Authorization"
+              value={authorization}
+              onChange={function(e) { setAuthorization(e.target.value); }}
+              disabled={hasSubscriptions}
+              placeholder="Bearer eyJhbGciOiJSUzI1..."
+              helperText="Optional. Bearer token or session header for the hub."
               sx={{ mb: 2 }}
             />
             <TextField

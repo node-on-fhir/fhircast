@@ -54,7 +54,7 @@
       "backgroundImagePath": "/backgrounds/medical/Gradient.jpg",
       "palette": {
         "mode": "dark",
-        "primaryColor": "rgb(33, 150, 243)",
+        "primaryColor": "rgb(66, 75, 180)",
         "primaryText": "rgba(255, 255, 255, 0.95) !important",
         "secondaryColor": "#9c27b0",
         "secondaryText": "rgba(255, 255, 255, 0.95) !important",
@@ -67,7 +67,7 @@
         "backgroundCanvas": "#f6f6f6",
         "backgroundCanvasDark": "#121212",
         "background": "linear-gradient(180deg, #0a0a0a 0%, #1a1a2e 100%)",
-        "appBarColor": "linear-gradient(135deg, rgba(33, 150, 243, 0.3) 0%, rgba(156, 39, 176, 0.3) 100%)",
+        "appBarColor": "linear-gradient(135deg, rgba(66, 75, 180, 0.3) 0%, rgba(75, 90, 195, 0.3) 100%)",
         "appBarTextColor": "#ffffff !important",
         "appBarColorDark": "linear-gradient(135deg, rgba(33, 150, 243, 0.2) 0%, rgba(156, 39, 176, 0.2) 100%)",
         "appBarTextColorDark": "#ffffff !important",
@@ -280,6 +280,9 @@
         "caution": 10
       }
     },
+    "stripe": {
+      "publishableKey": "pk_test_51T0ojC5b8CJ4SCQxZ4whny1sUYBeydpMBgbZckc9qfMvb2k0mPMk4UNEEZLvnZgfngsSNvHGegjVPO57J4FU5cYu00Eoka4opw"
+    },
     "businessPages": {
       "privacy": {
         "enabled": true,
@@ -374,27 +377,13 @@
           "interactions": ["read", "create", "update", "delete", "search"],
           "search": true,
           "publication": true,
-          "requireAuth": true,
-          "fhircast": {
-            "publish": true,
-            "events": ["originate", "amend", "attest", "reactivate", "destroy", "access"]
-          }
+          "requireAuth": true
         },
         "DocumentReference": {
           "interactions": ["read", "create", "update", "delete", "search"],
           "search": true,
           "publication": true,
           "requireAuth": true
-        },
-        "Encounter": {
-          "interactions": ["read", "create", "update", "delete", "search"],
-          "search": true,
-          "publication": true,
-          "requireAuth": true,
-          "fhircast": {
-            "publish": true,
-            "events": ["originate", "amend", "attest", "reactivate", "destroy", "access"]
-          }
         },
         "Endpoint": {
           "interactions": ["read", "create", "update", "delete", "search"],
@@ -412,11 +401,7 @@
           "interactions": ["read", "create", "update", "delete", "search"],
           "search": true,
           "publication": true,
-          "requireAuth": true,
-          "fhircast": {
-            "publish": true,
-            "events": ["originate", "amend", "attest", "reactivate", "destroy", "access"]
-          }
+          "requireAuth": true
         },
         "List": {
           "interactions": ["read", "create", "update", "delete", "search"],
@@ -476,11 +461,7 @@
           "interactions": ["read", "search"],
           "search": true,
           "publication": true,
-          "requireAuth": true,
-          "fhircast": {
-            "publish": true,
-            "events": ["originate", "amend", "attest", "reactivate", "destroy", "access"]
-          }
+          "requireAuth": true
         },
         "Practitioner": {
           "interactions": ["read", "search"],
@@ -549,25 +530,6 @@
           "requireAuth": true
         }
       }
-    },
-    "recordLifecycle": {
-      "enabled": true,
-      "hipaaSubscriber": true,
-      "fhircastBridge": true,
-      "monitoredCollections": [
-        "Patients",
-        "Observations",
-        "Conditions",
-        "Encounters",
-        "DiagnosticReports",
-        "ImagingStudies",
-        "ServiceRequests",
-        "MedicationRequests",
-        "Procedures",
-        "AllergyIntolerances",
-        "CarePlans",
-        "Goals"
-      ]
     }
   }
 }

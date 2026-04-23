@@ -31,14 +31,19 @@ var PUBLISHABLE_LIFECYCLE_EVENTS = AllLifecycleEvents.filter(function(evt) {
 // PUBLISH EVENT
 // =============================================================================
 
-function PublishEvent({ isPublishAllowed, onPublishEvent }) {
+function PublishEvent({ isPublishAllowed, onPublishEvent, topic: propTopic, onTopicChange }) {
   const [eventName, setEventName] = useState(EventType.PatientOpen);
   const [contextString, setContextString] = useState(
     JSON.stringify(DEFAULT_CONTEXT, null, 2)
   );
   const [contextError, setContextError] = useState(null);
-  const [topic, setTopic] = useState(DEFAULT_TOPIC);
+  const [internalTopic, setInternalTopic] = useState(DEFAULT_TOPIC);
   const [previousId, setPreviousId] = useState(null);
+
+  var effectiveTopic = propTopic !== undefined ? propTopic : internalTopic;
+  var handleTopicChange = onTopicChange
+    ? function(e) { onTopicChange(e.target.value); }
+    : function(e) { setInternalTopic(e.target.value); };
 
   function validateContextJson(context) {
     try {
@@ -83,7 +88,7 @@ function PublishEvent({ isPublishAllowed, onPublishEvent }) {
     }
 
     var evt = {};
-    evt[EVENT_TOPIC] = topic;
+    evt[EVENT_TOPIC] = effectiveTopic;
     evt[EVENT_EVENT] = resolvedEventName;
     evt.context = JSON.parse(contextString);
 
@@ -149,11 +154,11 @@ function PublishEvent({ isPublishAllowed, onPublishEvent }) {
       <CardContent>
         <Box component="form" onSubmit={function(e) { e.preventDefault(); }}>
           <TextField
-            id="publishTopicInput"
+            id="publishEventTopicInput"
             fullWidth
             label="Topic"
-            value={topic}
-            onChange={function(e) { setTopic(e.target.value); }}
+            value={effectiveTopic}
+            onChange={handleTopicChange}
             sx={{ mb: 2 }}
           />
           <FormControl fullWidth sx={{ mb: 2 }}>

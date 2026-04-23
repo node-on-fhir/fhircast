@@ -6,13 +6,13 @@
       "name": "FhircastConfigPage",
       "path": "/fhircast-config",
       "component": "FhircastConfigPage",
-      "requireAuth": false
+      "requireAuth": true
     },
     {
       "name": "FhircastSubscribePage",
       "path": "/fhircast-subscribe",
       "component": "FhircastSubscribePage",
-      "requireAuth": false
+      "requireAuth": true
     },
     {
       "name": "FhircastPublishPage",
@@ -26,7 +26,7 @@
       "primaryText": "FHIRcast",
       "to": "/fhircast-config",
       "iconName": "Cast",
-      "requireAuth": false
+      "requireAuth": true
     }
   ]
 }

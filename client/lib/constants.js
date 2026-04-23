@@ -3,9 +3,9 @@
 import { Meteor } from 'meteor/meteor';
 import { get } from 'lodash';
 
-export const DEFAULT_HUB_URL = get(Meteor, 'settings.public.fhircast.hubUrl', 'http://localhost:3000/api/hub');
-export const DEFAULT_CLIENT_URL = get(Meteor, 'settings.public.fhircast.clientUrl', 'http://localhost:3000/client');
-export const DEFAULT_WS_URL = get(Meteor, 'settings.public.fhircast.wsUrl', 'ws://localhost:3000/bind');
+export const DEFAULT_HUB_URL = get(Meteor, 'settings.public.fhircast.hubUrl', 'http://localhost:3200/api/hub');
+export const DEFAULT_CLIENT_URL = get(Meteor, 'settings.public.fhircast.clientUrl', 'http://localhost:3100/client');
+export const DEFAULT_WS_URL = get(Meteor, 'settings.public.fhircast.wsUrl', 'ws://localhost:3200/bind');
 
 export const DEFAULT_SECRET = 'secret';
 export const DEFAULT_TOPIC = 'DrXRay';

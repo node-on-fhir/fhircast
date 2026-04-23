@@ -4,14 +4,16 @@ import React from 'react';
 import {
   Card, CardHeader, CardContent,
   Table, TableHead, TableBody, TableRow, TableCell, TableContainer,
-  Chip, Typography
+  Chip, Typography, IconButton
 } from '@mui/material';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import LinkOffIcon from '@mui/icons-material/LinkOff';
 
 // =============================================================================
 // SUB ROW
 // =============================================================================
 
-function SubRow({ sub }) {
+function SubRow({ sub, onUnsubscribe }) {
   return (
     <TableRow>
       <TableCell sx={{ color: 'text.primary' }}>{sub.topic}</TableCell>
@@ -28,6 +30,20 @@ function SubRow({ sub }) {
           );
         })}
       </TableCell>
+      <TableCell>
+        {sub.status === 'active' ? (
+          <CheckCircleIcon sx={{ color: 'success.main' }} />
+        ) : null}
+      </TableCell>
+      <TableCell>
+        <IconButton
+          size="small"
+          onClick={function() { if (onUnsubscribe) onUnsubscribe(sub); }}
+          title="Release"
+        >
+          <LinkOffIcon fontSize="small" />
+        </IconButton>
+      </TableCell>
     </TableRow>
   );
 }
@@ -36,7 +52,7 @@ function SubRow({ sub }) {
 // SUBSCRIPTION LIST
 // =============================================================================
 
-function SubscriptionList({ subs }) {
+function SubscriptionList({ subs, onUnsubscribe }) {
   return (
     <Card sx={{ mb: 2, bgcolor: 'background.paper' }}>
       <CardHeader
@@ -61,11 +77,13 @@ function SubscriptionList({ subs }) {
                 <TableRow>
                   <TableCell sx={{ color: 'text.secondary', fontWeight: 'bold' }}>Topic</TableCell>
                   <TableCell sx={{ color: 'text.secondary', fontWeight: 'bold' }}>Events</TableCell>
+                  <TableCell sx={{ color: 'text.secondary', fontWeight: 'bold' }}>Status</TableCell>
+                  <TableCell sx={{ color: 'text.secondary', fontWeight: 'bold' }}>Actions</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {subs.map(function(sub) {
-                  return <SubRow key={sub.topic} sub={sub} />;
+                  return <SubRow key={sub.topic} sub={sub} onUnsubscribe={onUnsubscribe} />;
                 })}
               </TableBody>
             </Table>

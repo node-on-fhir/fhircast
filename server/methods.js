@@ -6,26 +6,7 @@ import { fetch } from 'meteor/fetch';
 import { get, set } from 'lodash';
 import { AllLifecycleEvents } from '../../record-lifecycle/lib/RecordLifecycleEvents';
 import { FhircastEvents } from '../lib/FhircastEvents';
-
-// =============================================================================
-// HELPERS
-// =============================================================================
-
-/**
- * Recursively replace dots in object keys with underscores.
- * MongoDB/Minimongo forbid dots in field names; FHIRcast STU3 wire format
- * uses keys like "hub.topic" and "hub.event".
- */
-function sanitizeDottedKeys(obj) {
-  if (obj === null || typeof obj !== 'object') return obj;
-  if (Array.isArray(obj)) return obj.map(sanitizeDottedKeys);
-  var result = {};
-  Object.keys(obj).forEach(function(key) {
-    var safeKey = key.replace(/\./g, '_');
-    result[safeKey] = sanitizeDottedKeys(obj[key]);
-  });
-  return result;
-}
+import { sanitizeDottedKeys } from '../lib/sanitize.js';
 
 // =============================================================================
 // METEOR METHODS (Meteor v3 Async Pattern)
@@ -53,9 +34,10 @@ Meteor.methods({
    * @param {Object} subscriptionData - Subscription parameters
    * @returns {Object} Response from the hub
    */
-  'fhircast.subscribe': async function(hubUrl, subscriptionData) {
+  'fhircast.subscribe': async function(hubUrl, subscriptionData, authorization) {
     check(hubUrl, String);
     check(subscriptionData, Object);
+    check(authorization, Match.Maybe(String));
 
     if (!this.userId) {
       throw new Meteor.Error('not-authorized', 'You must be logged in');
@@ -70,9 +52,14 @@ Meteor.methods({
         payload['hub.events'] = payload['hub.events'].join(',');
       }
 
+      var headers = { 'Content-Type': 'application/json' };
+      if (authorization) {
+        headers['Authorization'] = authorization;
+      }
+
       var response = await fetch(hubUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: headers,
         body: JSON.stringify(payload)
       });
 
@@ -96,9 +83,10 @@ Meteor.methods({
    * @param {Object} subscriptionData - Unsubscription parameters
    * @returns {Object} Response from the hub
    */
-  'fhircast.unsubscribe': async function(hubUrl, subscriptionData) {
+  'fhircast.unsubscribe': async function(hubUrl, subscriptionData, authorization) {
     check(hubUrl, String);
     check(subscriptionData, Object);
+    check(authorization, Match.Maybe(String));
 
     if (!this.userId) {
       throw new Meteor.Error('not-authorized', 'You must be logged in');
@@ -115,9 +103,14 @@ Meteor.methods({
         payload['hub.events'] = payload['hub.events'].join(',');
       }
 
+      var headers = { 'Content-Type': 'application/json' };
+      if (authorization) {
+        headers['Authorization'] = authorization;
+      }
+
       var response = await fetch(hubUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: headers,
         body: JSON.stringify(payload)
       });
 
@@ -297,10 +290,10 @@ Meteor.methods({
 // PUBLICATIONS
 // =============================================================================
 
-Meteor.publish('fhircast.events', function() {
+Meteor.publish('fhircast.events', async function() {
   var self = this;
 
-  var handle = FhircastEvents.find({}, {
+  var handle = await FhircastEvents.find({}, {
     sort: { _receivedAt: -1 },
     limit: 200
   }).observeChanges({
@@ -322,3 +315,5 @@ Meteor.publish('fhircast.events', function() {
 });
 
 console.log('[fhircast-module] Server methods registered');
+
+import './clientEndpoint.js';

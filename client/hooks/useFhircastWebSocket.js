@@ -24,17 +24,20 @@ export function useWebSocket({ url, onMessage, onOpen, onClose }) {
       close();
     }
 
+    console.log('[useWebSocket] Opening:', url);
     setStatus(WebSocketStatus.Opening);
 
     wsRef.current = new WebSocket(url);
     wsRef.current.onopen = function(e) {
+      console.log('[useWebSocket] Connected');
       setStatus(WebSocketStatus.Open);
       call(onOpen, e);
     };
     wsRef.current.onmessage = function(e) {
       call(onMessage, e);
     };
-    wsRef.current.onclose = function() {
+    wsRef.current.onclose = function(e) {
+      console.log('[useWebSocket] Closed, code:', e.code, 'reason:', e.reason);
       close();
     };
   }
@@ -69,6 +72,7 @@ export function useFhircastWebSocket({ url, endpoint, connect, onBind, onUnbind,
 
   function handleMessage(e) {
     var data = JSON.parse(e.data);
+    console.log('[fhircast-ws] Received:', data);
 
     if (data.bound) {
       setIsBound(true);

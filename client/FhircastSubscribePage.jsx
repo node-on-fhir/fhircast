@@ -1,18 +1,26 @@
 // npmPackages/fhircast-module/client/FhircastSubscribePage.jsx
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box, Card, CardHeader, CardContent,
   TextField, Button, Alert, Autocomplete, Chip,
-  CircularProgress, Typography
+  CircularProgress, Typography, FormControlLabel, Checkbox,
+  InputAdornment, Tooltip, IconButton
 } from '@mui/material';
 import CastIcon from '@mui/icons-material/Cast';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import InfoIcon from '@mui/icons-material/Info';
+import LockIcon from '@mui/icons-material/Lock';
+import LockOpenIcon from '@mui/icons-material/LockOpen';
+import { useSearchParams } from 'react-router-dom';
+import { Meteor } from 'meteor/meteor';
 import { Random } from 'meteor/random';
 import { Session } from 'meteor/session';
 import { useTracker } from 'meteor/react-meteor-data';
 import { get } from 'lodash';
-import { fetch } from 'meteor/fetch';
 
+import { FhircastEvents } from '../lib/FhircastEvents';
 import SubscriptionList from './components/SubscriptionList.jsx';
 import EventsAccordion from './components/EventsAccordion.jsx';
 import { useFhircastWebSocket } from './hooks/useFhircastWebSocket.js';
@@ -26,6 +34,7 @@ import {
   DEFAULT_WS_URL,
   WEBSOCKET_CHANNEL_TYPE
 } from './lib/constants.js';
+import { sanitizeDottedKeys } from '../lib/sanitize.js';
 
 // =============================================================================
 // CONSTANTS
@@ -42,7 +51,7 @@ var EVENT_OPTIONS = Object.values(EventType).map(function(value) {
 });
 
 var INITIAL_SUB = {};
-INITIAL_SUB[SubscriptionParams.events] = [EventType.PatientOpen, EventType.PatientClose];
+INITIAL_SUB[SubscriptionParams.events] = [EventType.PatientOpen, EventType.PatientClose, EventType.ImagingStudyOpen, EventType.ImagingStudyClose];
 INITIAL_SUB[SubscriptionParams.secret] = DEFAULT_SECRET;
 INITIAL_SUB[SubscriptionParams.topic] = DEFAULT_TOPIC;
 INITIAL_SUB[SubscriptionParams.lease] = DEFAULT_LEASE;
@@ -51,11 +60,6 @@ INITIAL_SUB[SubscriptionParams.channelType] = WEBSOCKET_CHANNEL_TYPE;
 // =============================================================================
 // STATUS MAPPING
 // =============================================================================
-
-var STATUS_SEVERITY = {};
-STATUS_SEVERITY[WebSocketStatus.Closed] = 'warning';
-STATUS_SEVERITY[WebSocketStatus.Opening] = 'info';
-STATUS_SEVERITY[WebSocketStatus.Open] = 'info';
 
 var STATUS_TEXT = {};
 STATUS_TEXT[WebSocketStatus.Closed] = 'Closed';
@@ -70,19 +74,18 @@ function isSuccessStatus(status) {
   return status && status >= 200 && status < 300;
 }
 
-async function sendSubscription(url, subscription) {
+async function sendSubscription(url, subscription, authorization) {
   var payload = Object.assign({}, subscription);
   if (Array.isArray(payload['hub.events'])) {
     payload['hub.events'] = payload['hub.events'].join(',');
   }
 
+  var mode = payload['hub.mode'];
+  var methodName = mode === 'unsubscribe' ? 'fhircast.unsubscribe' : 'fhircast.subscribe';
+
   try {
-    var response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    return { status: response.status };
+    var result = await Meteor.callAsync(methodName, url, payload, authorization);
+    return { status: result.status };
   } catch (error) {
     console.error('[fhircast] Subscription error:', error);
     return null;
@@ -94,9 +97,17 @@ async function sendSubscription(url, subscription) {
 // =============================================================================
 
 function FhircastSubscribePage() {
+  var [searchParams] = useSearchParams();
+
   // Subscription form state
   var [subscription, setSubscription] = useState(INITIAL_SUB);
+
+  // Authorization visibility: default hidden, ?authorization=true shows it
+  var [showAuthorization, setShowAuthorization] = useState(
+    searchParams.get('authorization') === 'true'
+  );
   var [hubUrl, setHubUrl] = useState(DEFAULT_HUB_URL);
+  var [authorization, setAuthorization] = useState('');
   var [clientUrl, setClientUrl] = useState(DEFAULT_CLIENT_URL);
   var [subscriptions, setSubscriptions] = useState({});
   var [error, setError] = useState(null);
@@ -107,6 +118,8 @@ function FhircastSubscribePage() {
   var [wsEndpoint, setWsEndpoint] = useState(Random.id());
   var [connectWebSocket, setConnectWebSocket] = useState(false);
   var [receivedEvents, setReceivedEvents] = useState([]);
+  var [saveToMinimongo, setSaveToMinimongo] = useState(true);
+  var [saveToServer, setSaveToServer] = useState(false);
 
   var ws = useFhircastWebSocket({
     url: wsUrl,
@@ -114,8 +127,44 @@ function FhircastSubscribePage() {
     connect: connectWebSocket,
     onEvent: function(evt) {
       setReceivedEvents(function(prev) { return [evt].concat(prev); });
+      if (saveToMinimongo) {
+        FhircastEvents.insert(Object.assign({}, sanitizeDottedKeys(evt), {
+          _receivedAt: new Date().toISOString(),
+          _source: 'ws-client'
+        }));
+      }
     }
   });
+
+  // Set topic from URL param or Session on mount
+  useEffect(function() {
+    var topicParam = searchParams.get('topic');
+    if (topicParam) {
+      setSubscription(function(prev) {
+        return Object.assign({}, prev, {
+          [SubscriptionParams.topic]: topicParam
+        });
+      });
+    } else {
+      var patientId = Session.get('selectedPatientId') || Session.get('selectedPatient');
+      if (patientId && typeof patientId === 'string') {
+        setSubscription(function(prev) {
+          return Object.assign({}, prev, {
+            [SubscriptionParams.topic]: patientId
+          });
+        });
+      }
+    }
+  }, []);
+
+  // Subscribe to DDP events from Meteor pub/sub (reliable fallback)
+  var ddpEvents = useTracker(function() {
+    Meteor.subscribe('fhircast.events');
+    return FhircastEvents.find({}, { sort: { _receivedAt: -1 }, limit: 200 }).fetch();
+  }, []);
+
+  // Merge WS events with DDP events for display
+  var allReceivedEvents = receivedEvents.concat(ddpEvents);
 
   // =========================================================================
   // SUBSCRIPTION HANDLERS
@@ -132,7 +181,7 @@ function FhircastSubscribePage() {
       [SubscriptionParams.callback]: clientUrl,
       [SubscriptionParams.mode]: mode,
       [SubscriptionParams.channelEndpoint]: wsEndpoint
-    })).then(function(response) {
+    }), authorization).then(function(response) {
       setError(getError(response));
       setStatus(SubscriptionStatus.Idle);
 
@@ -175,7 +224,7 @@ function FhircastSubscribePage() {
 
   function addOrUpdateSub(sub) {
     var result = Object.assign({}, subscriptions);
-    result[sub.topic] = sub;
+    result[sub.topic] = Object.assign({}, sub, { status: 'active' });
     return result;
   }
 
@@ -200,6 +249,34 @@ function FhircastSubscribePage() {
     var updatedResult = Object.assign({}, subscriptions);
     updatedResult[subKey] = Object.assign({}, foundSub, { events: remainingEvents });
     return updatedResult;
+  }
+
+  function handleUnsubscribeSub(sub) {
+    var unsubPayload = Object.assign({}, subscription, {
+      [SubscriptionParams.topic]: sub.topic,
+      [SubscriptionParams.events]: sub.events,
+      [SubscriptionParams.callback]: clientUrl,
+      [SubscriptionParams.mode]: SubscriptionMode.unsubscribe,
+      [SubscriptionParams.channelEndpoint]: wsEndpoint
+    });
+
+    setStatus(SubscriptionStatus.Unsubscribing);
+
+    sendSubscription(hubUrl, unsubPayload, authorization).then(function(response) {
+      setError(getError(response));
+      setStatus(SubscriptionStatus.Idle);
+
+      if (!response || !isSuccessStatus(response.status)) return;
+
+      var newSubs = Object.assign({}, subscriptions);
+      delete newSubs[sub.topic];
+      setSubscriptions(newSubs);
+
+      if (Object.keys(newSubs).length === 0) {
+        setWsEndpoint(Random.id());
+        setConnectWebSocket(false);
+      }
+    });
   }
 
   function getSubArray() {
@@ -249,16 +326,27 @@ function FhircastSubscribePage() {
 
       <Box sx={{
         display: 'grid',
-        gridTemplateColumns: { xs: '1fr', md: '1fr 1fr 1fr 1fr' },
+        gridTemplateColumns: { xs: '1fr', md: '1fr 2fr' },
         gap: 2,
         flex: 1,
         minHeight: 0,
         overflow: 'hidden'
       }}>
-        {/* Column 1: Subscribe to Events */}
-        <Card sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', bgcolor: 'background.paper' }}>
+        {/* Column 1: Subscribe to Events + Active Subscriptions (stacked) */}
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, height: '100%', overflow: 'auto' }}>
+          <Card sx={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', bgcolor: 'background.paper' }}>
             <CardHeader
               title="Subscribe to Events"
+              action={
+                <Tooltip title={showAuthorization ? 'Hide authorization' : 'Show authorization'}>
+                  <IconButton
+                    size="small"
+                    onClick={function() { setShowAuthorization(function(prev) { return !prev; }); }}
+                  >
+                    {showAuthorization ? <LockOpenIcon fontSize="small" /> : <LockIcon fontSize="small" />}
+                  </IconButton>
+                </Tooltip>
+              }
               sx={{
                 borderBottom: 1,
                 borderColor: 'divider',
@@ -280,6 +368,47 @@ function FhircastSubscribePage() {
                   sx={{ mb: 2 }}
                   size="small"
                 />
+                <TextField
+                  id="subscribeWsUrlInput"
+                  fullWidth
+                  label="WebSocket URL"
+                  value={wsUrl}
+                  onChange={function(e) { setWsUrl(e.target.value); }}
+                  disabled={ws.isBound}
+                  sx={{ mb: 2 }}
+                  size="small"
+                  InputProps={{
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <Tooltip title={ws.isBound ? 'Bound to ' + wsEndpoint : (STATUS_TEXT[ws.status] || 'Unknown')}>
+                          {ws.isBound ? (
+                            <CheckCircleIcon sx={{ color: 'success.main' }} fontSize="small" />
+                          ) : ws.status === WebSocketStatus.Opening ? (
+                            <CircularProgress size={18} />
+                          ) : ws.status === WebSocketStatus.Open ? (
+                            <InfoIcon sx={{ color: 'info.main' }} fontSize="small" />
+                          ) : (
+                            <WarningAmberIcon sx={{ color: 'warning.main' }} fontSize="small" />
+                          )}
+                        </Tooltip>
+                      </InputAdornment>
+                    )
+                  }}
+                />
+                {showAuthorization ? (
+                  <TextField
+                    id="subscribeAuthorizationInput"
+                    fullWidth
+                    label="Authorization"
+                    value={authorization}
+                    onChange={function(e) { setAuthorization(e.target.value); }}
+                    disabled={hasSubscriptions}
+                    placeholder="Bearer eyJhbGciOiJSUzI1..."
+                    helperText="Optional. Bearer token or session header for the hub."
+                    sx={{ mb: 2 }}
+                    size="small"
+                  />
+                ) : null}
                 <TextField
                   id="subscribeTopicInput"
                   fullWidth
@@ -325,6 +454,28 @@ function FhircastSubscribePage() {
                   }}
                   sx={{ mb: 2 }}
                 />
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={saveToMinimongo}
+                      onChange={function(e) { setSaveToMinimongo(e.target.checked); }}
+                      size="small"
+                    />
+                  }
+                  label="Save to client"
+                  sx={{ mb: 1 }}
+                />
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={saveToServer}
+                      onChange={function(e) { setSaveToServer(e.target.checked); }}
+                      size="small"
+                    />
+                  }
+                  label="Save to server"
+                  sx={{ mb: 1 }}
+                />
                 <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
                   <Button
                     id="subscribePageSubscribeButton"
@@ -351,48 +502,13 @@ function FhircastSubscribePage() {
             </CardContent>
           </Card>
 
-        {/* Column 2: Active Subscriptions */}
-        <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-          <SubscriptionList subs={getSubArray()} />
+          <SubscriptionList subs={getSubArray()} onUnsubscribe={handleUnsubscribeSub} />
         </Box>
 
-        {/* Column 3: WebSocket Status */}
-        <Card sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', bgcolor: 'background.paper' }}>
-            <CardHeader
-              title="WebSocket"
-              sx={{
-                borderBottom: 1,
-                borderColor: 'divider',
-                '& .MuiCardHeader-title': { fontSize: '1.1rem' }
-              }}
-            />
-            <CardContent>
-              <TextField
-                id="subscribeWsUrlInput"
-                fullWidth
-                label="WebSocket URL"
-                value={wsUrl}
-                onChange={function(e) { setWsUrl(e.target.value); }}
-                disabled={ws.isBound}
-                sx={{ mb: 2 }}
-                size="small"
-              />
-              {ws.isBound ? (
-                <Alert severity="success">
-                  Bound to <strong>{wsEndpoint}</strong>
-                </Alert>
-              ) : (
-                <Alert severity={STATUS_SEVERITY[ws.status] || 'warning'}>
-                  {STATUS_TEXT[ws.status] || 'Unknown'}
-                </Alert>
-              )}
-            </CardContent>
-          </Card>
-
-        {/* Column 4: Received Events */}
+        {/* Column 2: Received Events */}
         <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'auto' }}>
           <EventsAccordion
-            events={receivedEvents}
+            events={allReceivedEvents}
             title="Received Events"
             severity="info"
             emptyMessage="No events received yet"
