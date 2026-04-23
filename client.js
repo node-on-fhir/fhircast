@@ -6,6 +6,7 @@ import FhircastSubscribePage from './client/FhircastSubscribePage.jsx';
 import FhircastPublishPage from './client/FhircastPublishPage.jsx';
 import FhircastNavButtons from './client/components/FhircastNavButtons.jsx';
 import CollectionsToPublish from './client/components/CollectionsToPublish.jsx';
+import SubscribeButton from './client/components/SubscribeButton.jsx';
 import { FhircastEvents } from './lib/FhircastEvents';
 import workflowConfig from './workflow.json';
 
@@ -80,7 +81,8 @@ export {
   FhircastSubscribePage,
   FhircastPublishPage,
   FhircastNavButtons,
-  CollectionsToPublish
+  CollectionsToPublish,
+  SubscribeButton
 };
 
 // Default export (for WorkflowRegistry.registerWorkflow())

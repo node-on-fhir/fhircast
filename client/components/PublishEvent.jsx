@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import {
   Card, CardHeader, CardContent,
-  TextField, Button, Box, Typography,
+  TextField, Button, Box, Typography, Alert,
   FormControl, InputLabel, Select, MenuItem, ListSubheader
 } from '@mui/material';
 import { Random } from 'meteor/random';
@@ -31,7 +31,7 @@ var PUBLISHABLE_LIFECYCLE_EVENTS = AllLifecycleEvents.filter(function(evt) {
 // PUBLISH EVENT
 // =============================================================================
 
-function PublishEvent({ isPublishAllowed, onPublishEvent, topic: propTopic, onTopicChange }) {
+function PublishEvent({ isPublishAllowed, onPublishEvent, topic: propTopic, onTopicChange, embedded }) {
   const [eventName, setEventName] = useState(EventType.PatientOpen);
   const [contextString, setContextString] = useState(
     JSON.stringify(DEFAULT_CONTEXT, null, 2)
@@ -103,8 +103,9 @@ function PublishEvent({ isPublishAllowed, onPublishEvent, topic: propTopic, onTo
     validateContextJson(value);
   }
 
+  var isFormDisabled = !isPublishAllowed;
   var isContextInvalid = Boolean(contextError);
-  var isPublishDisabled = !isPublishAllowed || isContextInvalid;
+  var isPublishDisabled = isFormDisabled || isContextInvalid;
 
   // Build menu items with grouped sections
   function renderEventMenuItems() {
@@ -139,8 +140,78 @@ function PublishEvent({ isPublishAllowed, onPublishEvent, topic: propTopic, onTo
     return items;
   }
 
+  var formContent = (
+    <>
+      {isFormDisabled ? (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          WebSocket not bound to hub. Events will be publishable once the connection is established.
+        </Alert>
+      ) : null}
+      <Box component="form" onSubmit={function(e) { e.preventDefault(); }}>
+        <TextField
+          id="publishTopicInput"
+          fullWidth
+          label="Topic"
+          value={topic}
+          onChange={function(e) { setTopic(e.target.value); }}
+          disabled={isFormDisabled}
+          sx={{ mb: 2 }}
+        />
+        <FormControl fullWidth sx={{ mb: 2 }} disabled={isFormDisabled}>
+          <InputLabel id="event-type-label">Event</InputLabel>
+          <Select
+            labelId="event-type-label"
+            id="eventTypeSelect"
+            value={eventName}
+            label="Event"
+            onChange={function(e) { setEventName(e.target.value); }}
+          >
+            {renderEventMenuItems()}
+          </Select>
+        </FormControl>
+        <TextField
+          id="contextTextarea"
+          fullWidth
+          multiline
+          rows={6}
+          label="Context"
+          value={contextString}
+          onChange={handleContextChange}
+          error={isContextInvalid}
+          helperText={contextError || (contextString ? 'Valid JSON' : '')}
+          disabled={isFormDisabled}
+          sx={{ mb: 2 }}
+          InputProps={{
+            sx: { fontFamily: 'monospace', fontSize: '0.8rem' }
+          }}
+        />
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <Button
+            id="publishButton"
+            variant="contained"
+            disabled={isPublishDisabled}
+            onClick={handlePublishEvent}
+          >
+            Publish
+          </Button>
+        </Box>
+      </Box>
+      {previousId ? (
+        <Box sx={{ pt: 1 }}>
+          <Typography variant="caption" sx={{ color: 'success.main' }}>
+            Published event with ID <strong>{previousId}</strong>
+          </Typography>
+        </Box>
+      ) : null}
+    </>
+  );
+
+  if (embedded) {
+    return formContent;
+  }
+
   return (
-    <Card sx={{ mb: 2, bgcolor: 'background.paper' }}>
+    <Card sx={{ mb: 2, bgcolor: 'background.paper', opacity: isFormDisabled ? 0.5 : 1, transition: 'opacity 0.2s' }}>
       <CardHeader
         title="Publish Event"
         sx={{
@@ -152,61 +223,8 @@ function PublishEvent({ isPublishAllowed, onPublishEvent, topic: propTopic, onTo
         }}
       />
       <CardContent>
-        <Box component="form" onSubmit={function(e) { e.preventDefault(); }}>
-          <TextField
-            id="publishEventTopicInput"
-            fullWidth
-            label="Topic"
-            value={effectiveTopic}
-            onChange={handleTopicChange}
-            sx={{ mb: 2 }}
-          />
-          <FormControl fullWidth sx={{ mb: 2 }}>
-            <InputLabel id="event-type-label">Event</InputLabel>
-            <Select
-              labelId="event-type-label"
-              id="eventTypeSelect"
-              value={eventName}
-              label="Event"
-              onChange={function(e) { setEventName(e.target.value); }}
-            >
-              {renderEventMenuItems()}
-            </Select>
-          </FormControl>
-          <TextField
-            id="contextTextarea"
-            fullWidth
-            multiline
-            rows={6}
-            label="Context"
-            value={contextString}
-            onChange={handleContextChange}
-            error={isContextInvalid}
-            helperText={contextError || (contextString ? 'Valid JSON' : '')}
-            sx={{ mb: 2 }}
-            InputProps={{
-              sx: { fontFamily: 'monospace', fontSize: '0.8rem' }
-            }}
-          />
-          <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <Button
-              id="publishButton"
-              variant="contained"
-              disabled={isPublishDisabled}
-              onClick={handlePublishEvent}
-            >
-              Publish
-            </Button>
-          </Box>
-        </Box>
+        {formContent}
       </CardContent>
-      {previousId ? (
-        <Box sx={{ px: 2, pb: 1 }}>
-          <Typography variant="caption" sx={{ color: 'success.main' }}>
-            Published event with ID <strong>{previousId}</strong>
-          </Typography>
-        </Box>
-      ) : null}
     </Card>
   );
 }

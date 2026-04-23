@@ -15,7 +15,6 @@ import { useTracker } from 'meteor/react-meteor-data';
 
 import { FhircastEvents } from '../lib/FhircastEvents';
 import CollectionsToPublish from './components/CollectionsToPublish.jsx';
-import PublishEvent from './components/PublishEvent.jsx';
 import HubEventsFeed from './components/HubEventsFeed.jsx';
 import AuditEventsColumn from './components/AuditEventsColumn.jsx';
 import SubscriptionList from './components/SubscriptionList.jsx';
@@ -78,6 +77,7 @@ function FhircastPublishPage() {
   var [sentEvents, setSentEvents] = useState([]);
   var [hubEvents, setHubEvents] = useState([]);
   var [columnMode, setColumnMode] = useState(2);
+  // publishMode is now managed inside CollectionsToPublish
 
   // Subscription state
   var [hubUrl, setHubUrl] = useState(DEFAULT_HUB_URL);
@@ -187,22 +187,28 @@ function FhircastPublishPage() {
   // EVENT HANDLERS
   // =========================================================================
 
-  function handlePublishEvent(evt, id) {
-    ws.publishEvent(evt, id);
-
-    var sentRecord = {
-      id: id || Random.id(),
+  async function handlePublishEvent(evt, id) {
+    var eventData = {
       timestamp: new Date().toJSON(),
+      id: id || Random.id(),
       event: evt
     };
 
+    // Track locally for "Sent Events" tab
     setSentEvents(function(prev) {
-      var next = [sentRecord].concat(prev);
+      var next = [eventData].concat(prev);
       if (next.length > MAX_EVENTS) {
         next = next.slice(0, MAX_EVENTS);
       }
       return next;
     });
+
+    // Publish via REST POST to hub (fires DDP insert as well)
+    try {
+      await Meteor.callAsync('fhircast.publishEvent', hubUrl, eventData);
+    } catch (err) {
+      console.warn('[FhircastPublishPage] Publish error:', err.reason || err.message);
+    }
   }
 
   function handleColumnModeChange(event, newMode) {
@@ -346,9 +352,8 @@ function FhircastPublishPage() {
 
           <SubscriptionList subs={getSubArray()} onUnsubscribe={handleUnsubscribeSub} />
 
-          <CollectionsToPublish />
-          <PublishEvent
-            isPublishAllowed={ws.isBound}
+          <CollectionsToPublish
+            isPublishAllowed={!!hubUrl}
             onPublishEvent={handlePublishEvent}
             topic={topic}
             onTopicChange={function(val) { setTopic(val); }}

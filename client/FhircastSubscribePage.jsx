@@ -98,9 +98,16 @@ async function sendSubscription(url, subscription, authorization) {
 
 function FhircastSubscribePage() {
   var [searchParams] = useSearchParams();
+  var topicFromUrl = searchParams.get('topic');
 
-  // Subscription form state
-  var [subscription, setSubscription] = useState(INITIAL_SUB);
+  // Subscription form state — use topic from URL query param if provided
+  var initialSub = INITIAL_SUB;
+  if (topicFromUrl) {
+    initialSub = Object.assign({}, INITIAL_SUB, {
+      [SubscriptionParams.topic]: topicFromUrl
+    });
+  }
+  var [subscription, setSubscription] = useState(initialSub);
 
   // Authorization visibility: default hidden, ?authorization=true shows it
   var [showAuthorization, setShowAuthorization] = useState(
