@@ -1,6 +1,7 @@
 // npmPackages/fhircast-module/client/FhircastSubscribePage.jsx
 
 import React, { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Box, Card, CardHeader, CardContent,
   TextField, Button, Alert, Autocomplete, Chip,
@@ -11,7 +12,7 @@ import { Random } from 'meteor/random';
 import { Session } from 'meteor/session';
 import { useTracker } from 'meteor/react-meteor-data';
 import { get } from 'lodash';
-import { fetch } from 'meteor/fetch';
+import { Meteor } from 'meteor/meteor';
 
 import SubscriptionList from './components/SubscriptionList.jsx';
 import EventsAccordion from './components/EventsAccordion.jsx';
@@ -76,13 +77,11 @@ async function sendSubscription(url, subscription) {
     payload['hub.events'] = payload['hub.events'].join(',');
   }
 
+  var mode = payload['hub.mode'];
+  var methodName = mode === 'unsubscribe' ? 'fhircast.unsubscribe' : 'fhircast.subscribe';
   try {
-    var response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    return { status: response.status };
+    var result = await Meteor.callAsync(methodName, url, payload);
+    return { status: result.status };
   } catch (error) {
     console.error('[fhircast] Subscription error:', error);
     return null;
@@ -94,8 +93,17 @@ async function sendSubscription(url, subscription) {
 // =============================================================================
 
 function FhircastSubscribePage() {
-  // Subscription form state
-  var [subscription, setSubscription] = useState(INITIAL_SUB);
+  var [searchParams] = useSearchParams();
+  var topicFromUrl = searchParams.get('topic');
+
+  // Subscription form state — use topic from URL query param if provided
+  var initialSub = INITIAL_SUB;
+  if (topicFromUrl) {
+    initialSub = Object.assign({}, INITIAL_SUB, {
+      [SubscriptionParams.topic]: topicFromUrl
+    });
+  }
+  var [subscription, setSubscription] = useState(initialSub);
   var [hubUrl, setHubUrl] = useState(DEFAULT_HUB_URL);
   var [clientUrl, setClientUrl] = useState(DEFAULT_CLIENT_URL);
   var [subscriptions, setSubscriptions] = useState({});

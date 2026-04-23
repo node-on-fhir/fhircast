@@ -14,7 +14,8 @@
     "./components/EventsAccordion": "./client/components/EventsAccordion.jsx",
     "./hooks/useFhircastWebSocket": "./client/hooks/useFhircastWebSocket.js",
     "./lib/types": "./client/lib/types.js",
-    "./lib/constants": "./client/lib/constants.js"
+    "./lib/constants": "./client/lib/constants.js",
+    "./components/SubscribeButton": "./client/components/SubscribeButton.jsx"
   },
   "peerDependencies": {
     "react": "^18.0.0",

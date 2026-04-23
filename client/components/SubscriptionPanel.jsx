@@ -7,7 +7,7 @@ import {
   CircularProgress
 } from '@mui/material';
 import { get } from 'lodash';
-import { fetch } from 'meteor/fetch';
+import { Meteor } from 'meteor/meteor';
 
 import SubscriptionList from './SubscriptionList.jsx';
 import { SubscriptionParams, SubscriptionMode, EventType } from '../lib/types.js';
@@ -60,13 +60,11 @@ async function sendSubscription(url, subscription) {
     payload['hub.events'] = payload['hub.events'].join(',');
   }
 
+  var mode = payload['hub.mode'];
+  var methodName = mode === 'unsubscribe' ? 'fhircast.unsubscribe' : 'fhircast.subscribe';
   try {
-    var response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    return { status: response.status };
+    var result = await Meteor.callAsync(methodName, url, payload);
+    return { status: result.status };
   } catch (error) {
     console.error('[fhircast] Subscription error:', error);
     return null;

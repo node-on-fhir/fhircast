@@ -210,6 +210,32 @@ Meteor.methods({
    * @param {Object} config - The fhircast config { publish: Boolean, events: String[] }
    * @returns {Object} Updated config
    */
+  'fhircast.setTopic': async function(topic) {
+    check(topic, String);
+
+    if (!this.userId) {
+      throw new Meteor.Error('not-authorized', 'You must be logged in');
+    }
+
+    console.log('[fhircast.setTopic] Setting topic:', topic);
+    set(Meteor, 'settings.public.fhircast.topic', topic);
+
+    return { topic: topic };
+  },
+
+  'fhircast.setTopicMode': async function(mode) {
+    check(mode, String);
+
+    if (!this.userId) {
+      throw new Meteor.Error('not-authorized', 'You must be logged in');
+    }
+
+    console.log('[fhircast.setTopicMode] Setting topic mode:', mode);
+    set(Meteor, 'settings.public.fhircast.topicMode', mode);
+
+    return { topicMode: mode };
+  },
+
   'fhircast.setResourceFhircast': async function(resourceType, config) {
     check(resourceType, String);
     check(config, Object);
@@ -297,10 +323,10 @@ Meteor.methods({
 // PUBLICATIONS
 // =============================================================================
 
-Meteor.publish('fhircast.events', function() {
+Meteor.publish('fhircast.events', async function() {
   var self = this;
 
-  var handle = FhircastEvents.find({}, {
+  var handle = await FhircastEvents.find({}, {
     sort: { _receivedAt: -1 },
     limit: 200
   }).observeChanges({
@@ -322,3 +348,6 @@ Meteor.publish('fhircast.events', function() {
 });
 
 console.log('[fhircast-module] Server methods registered');
+
+// Register FHIRcast hub HTTP endpoint
+import './hub.js';

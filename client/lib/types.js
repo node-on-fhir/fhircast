@@ -26,6 +26,12 @@ export const EventType = {
   EncounterClose: 'encounter-close',
   DiagnosticReportOpen: 'diagnosticreport-open',
   DiagnosticReportClose: 'diagnosticreport-close',
+  PatientUpdate: 'patient-update',
+  ImagingStudyUpdate: 'imagingstudy-update',
+  EncounterUpdate: 'encounter-update',
+  DiagnosticReportUpdate: 'diagnosticreport-update',
+  DiagnosticReportSelect: 'diagnosticreport-select',
+  SyncError: 'syncerror',
   LogoutUser: 'userlogout',
   HibernateUser: 'userhibernate'
 };
