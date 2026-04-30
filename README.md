@@ -357,3 +357,9 @@ fhircast/
 - **Dual delivery** -- Events are always stored via DDP (Meteor pub/sub) even if the hub is unreachable, so clients receive events regardless of WebSocket status.
 - **Raw WebSocket** -- The hub uses manual WebSocket frame encoding (no Socket.io dependency).
 - **Peer dependencies** -- React 18 and Material-UI v5 are peer dependencies; they come from the host Meteor application.
+
+
+
+## License
+
+Apache 2.0
