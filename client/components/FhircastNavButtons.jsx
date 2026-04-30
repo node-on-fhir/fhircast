@@ -6,20 +6,16 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 
-import {
-  Settings as SettingsIcon,
-  Subscriptions as SubscriptionsIcon,
-  Publish as PublishIcon
-} from '@mui/icons-material';
+import CastIcon from '@mui/icons-material/Cast';
+import CellTowerIcon from '@mui/icons-material/CellTower';
 
 // =============================================================================
 // FHIRCAST NAV BUTTONS
 // =============================================================================
 
 var footerRoutes = [
-  { label: 'Config', path: '/fhircast-config', icon: SettingsIcon },
-  { label: 'Subscribe', path: '/fhircast-subscribe', icon: SubscriptionsIcon },
-  { label: 'Publish', path: '/fhircast-publish', icon: PublishIcon }
+  { label: 'Subscribe', path: '/fhircast-subscribe', icon: CastIcon },
+  { label: 'Publish', path: '/fhircast-publish', icon: CellTowerIcon }
 ];
 
 function FhircastNavButtons() {

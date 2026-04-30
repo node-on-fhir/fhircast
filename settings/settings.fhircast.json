@@ -22,10 +22,11 @@
       "mode": "1up"
     },
     "fhircast": {
-      "hubUrl": "http://localhost:3200/api/hub",
-      "wsUrl": "ws://localhost:3200/bind",
+      "hubUrl": "http://localhost:3100/api/hub",
+      "wsUrl": "ws://localhost:3100/bind",
       "clientUrl": "http://localhost:3100/client",
-      "topic": "DrXRay"
+      "topic": "DrXRay",
+      "topicMode": "patientId"
     },
     "welcome": {
       "enabled": true,

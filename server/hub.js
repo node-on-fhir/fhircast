@@ -4,6 +4,7 @@
 // Accepts subscription/unsubscription requests and stores them in memory.
 
 import { WebApp } from 'meteor/webapp';
+import { Meteor } from 'meteor/meteor';
 import { fetch } from 'meteor/fetch';
 import { FhircastEvents } from '../lib/FhircastEvents';
 
@@ -106,12 +107,22 @@ WebApp.handlers.post('/api/hub', async function(req, res) {
 
     // Forward to WebSocket clients
     topicSubscribers.forEach(function(sub) {
-      if (sub.channelEndpoint && connectedClients.has(sub.channelEndpoint)) {
-        try {
-          sendWsMessage(connectedClients.get(sub.channelEndpoint), JSON.stringify(body));
-          console.log('[fhircast-hub] Forwarded via WS to endpoint:', sub.channelEndpoint);
-        } catch (err) {
-          console.warn('[fhircast-hub] WS forward error:', err.message);
+      if (sub.channelEndpoint) {
+        var endpointId = sub.channelEndpoint;
+        var bindIdx = endpointId.lastIndexOf('/bind/');
+        if (bindIdx !== -1) {
+          endpointId = endpointId.substring(bindIdx + 6);
+        }
+        if (connectedClients.has(endpointId)) {
+          try {
+            var clientWs = connectedClients.get(endpointId);
+            if (clientWs.readyState === 1) { // WebSocket.OPEN
+              clientWs.send(JSON.stringify(body));
+            }
+            console.log('[fhircast-hub] Forwarded via WS to endpoint:', endpointId);
+          } catch (err) {
+            console.warn('[fhircast-hub] WS forward error:', err.message);
+          }
         }
       }
     });
@@ -171,7 +182,7 @@ WebApp.handlers.post('/api/hub', async function(req, res) {
     console.log('[fhircast-hub] Subscription stored for topic:', topic, '— events:', eventsArray.join(', '));
     console.log('[fhircast-hub] Total topics:', subscriptions.size, '— subscribers for this topic:', subscriptions.get(topic).length);
 
-    var wsEndpoint = 'ws://localhost:' + (process.env.PORT || '3200') + '/ws/fhircast/' + encodeURIComponent(topic);
+    var wsEndpoint = 'ws://localhost:' + (process.env.PORT || '3100') + '/ws/fhircast/' + encodeURIComponent(topic);
 
     res.writeHead(202);
     res.end(JSON.stringify({
@@ -301,68 +312,75 @@ WebApp.handlers.use('/client', function(req, res, next) {
 // =============================================================================
 
 var connectedClients = new Map();
+Meteor.startup(function() {
+  var server = WebApp.httpServer;
+  var WebSocketServer = require('ws').Server;
+  var wss = new WebSocketServer({ noServer: true });
 
-WebApp.httpServer.on('upgrade', function(req, socket, head) {
-  if (!req.url.startsWith('/bind/')) return;
+  // Capture all existing upgrade listeners (Meteor DDP, SockJS, etc.)
+  var existingListeners = server.listeners('upgrade').slice();
+  console.log('[fhircast-ws] Captured', existingListeners.length, 'existing upgrade listener(s)');
 
-  var endpoint = req.url.replace('/bind/', '');
-  console.log('[fhircast-ws] Upgrade request for endpoint:', endpoint);
+  // Remove them all
+  server.removeAllListeners('upgrade');
 
-  // WebSocket handshake
-  var key = req.headers['sec-websocket-key'];
-  var crypto = require('crypto');
-  var acceptKey = crypto.createHash('sha1')
-    .update(key + '258EAFA5-E914-47DA-95CA-5AB5DC65C4F3')
-    .digest('base64');
+  // Single gatekeeper listener
+  server.on('upgrade', function(req, socket, head) {
+    if (req.url.startsWith('/bind/')) {
+      var endpoint = req.url.replace('/bind/', '');
+      console.log('[fhircast-ws] Upgrade request for endpoint:', endpoint);
 
-  socket.write(
-    'HTTP/1.1 101 Switching Protocols\r\n' +
-    'Upgrade: websocket\r\n' +
-    'Connection: Upgrade\r\n' +
-    'Sec-WebSocket-Accept: ' + acceptKey + '\r\n\r\n'
-  );
+      wss.handleUpgrade(req, socket, head, function(ws) {
+        connectedClients.set(endpoint, ws);
+        console.log('[fhircast-ws] Client connected, endpoint:', endpoint);
 
-  connectedClients.set(endpoint, socket);
-  console.log('[fhircast-ws] Client connected, endpoint:', endpoint);
+        ws.send(JSON.stringify({ bound: true }));
 
-  // Send { bound: true } — enables PUBLISH button
-  sendWsMessage(socket, JSON.stringify({ bound: true }));
+        ws.on('message', function(data) {
+          console.log('[fhircast-ws] Received data from client, endpoint:', endpoint, 'bytes:', data.length);
+        });
+        ws.on('close', function() {
+          connectedClients.delete(endpoint);
+          console.log('[fhircast-ws] Client disconnected:', endpoint);
+        });
+        ws.on('error', function(err) {
+          console.warn('[fhircast-ws] Socket error:', err.message);
+          connectedClients.delete(endpoint);
+        });
+      });
+      return; // Do NOT forward to other handlers
+    }
 
-  socket.on('data', function(buf) {
-    console.log('[fhircast-ws] Received data from client, endpoint:', endpoint, 'bytes:', buf.length);
+    // === Everything else: forward to original listeners (DDP, etc.) ===
+    for (var i = 0; i < existingListeners.length; i++) {
+      existingListeners[i].call(server, req, socket, head);
+    }
   });
-  socket.on('close', function() {
-    connectedClients.delete(endpoint);
-    console.log('[fhircast-ws] Client disconnected:', endpoint);
-  });
-  socket.on('error', function(err) {
-    console.warn('[fhircast-ws] Socket error:', err.message);
-    connectedClients.delete(endpoint);
-  });
+
+  console.log('[fhircast-ws] WebSocket upgrade handler installed (gatekeeper pattern)');
 });
 
-function sendWsMessage(socket, data) {
-  var payload = Buffer.from(data);
-  var frame;
-  if (payload.length < 126) {
-    frame = Buffer.alloc(2 + payload.length);
-    frame[0] = 0x81;
-    frame[1] = payload.length;
-    payload.copy(frame, 2);
-  } else if (payload.length < 65536) {
-    frame = Buffer.alloc(4 + payload.length);
-    frame[0] = 0x81;
-    frame[1] = 126;
-    frame.writeUInt16BE(payload.length, 2);
-    payload.copy(frame, 4);
-  } else {
-    frame = Buffer.alloc(10 + payload.length);
-    frame[0] = 0x81;
-    frame[1] = 127;
-    frame.writeBigUInt64BE(BigInt(payload.length), 2);
-    payload.copy(frame, 10);
-  }
-  socket.write(frame);
+// =============================================================================
+// SUBSCRIPTION QUERY — for in-process consumers (e.g. FhircastBridge)
+// =============================================================================
+
+/**
+ * Return all topics that have at least one subscriber listening for `eventName`.
+ *
+ * @param {string} eventName - e.g. "diagnosticreport-open"
+ * @returns {string[]} list of topic strings
+ */
+export function getSubscribedTopicsForEvent(eventName) {
+  var topics = [];
+  subscriptions.forEach(function(subscribers, topic) {
+    var hasEvent = subscribers.some(function(sub) {
+      return sub.events.includes(eventName);
+    });
+    if (hasEvent) {
+      topics.push(topic);
+    }
+  });
+  return topics;
 }
 
 // =============================================================================
@@ -372,4 +390,3 @@ function sendWsMessage(socket, data) {
 console.log('[fhircast-hub] Hub endpoint registered at POST /api/hub');
 console.log('[fhircast-hub] Hub status available at GET /api/hub');
 console.log('[fhircast-hub] Client endpoint registered at POST /client');
-console.log('[fhircast-hub] WebSocket server listening at /bind/<endpoint>');

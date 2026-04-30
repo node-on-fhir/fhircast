@@ -11,7 +11,9 @@ import ViewColumnIcon from '@mui/icons-material/ViewColumn';
 import ViewStreamIcon from '@mui/icons-material/ViewStream';
 import { Random } from 'meteor/random';
 import { Meteor } from 'meteor/meteor';
+import { Session } from 'meteor/session';
 import { useTracker } from 'meteor/react-meteor-data';
+import { get } from 'lodash';
 
 import { FhircastEvents } from '../lib/FhircastEvents';
 import CollectionsToPublish from './components/CollectionsToPublish.jsx';
@@ -88,6 +90,11 @@ function FhircastPublishPage() {
   var [subError, setSubError] = useState(null);
   var [subStatus, setSubStatus] = useState(SubscriptionStatus.Idle);
   var [connectWebSocket, setConnectWebSocket] = useState(false);
+
+  // React to Construction Zone toggle (Cmd+Shift+C)
+  var settingsRefresh = useTracker(function() {
+    return Session.get('settingsRefreshRequest');
+  });
 
   // Subscribe to DDP events from Meteor pub/sub
   var ddpEvents = useTracker(function() {
@@ -272,85 +279,8 @@ function FhircastPublishPage() {
         gap: 2,
         minHeight: 0
       }}>
-        {/* Column 1: Hub Connection + Collections Config + Publish Event */}
+        {/* Column 1: Collections Config + Hub Connection + Subscriptions */}
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-
-          {/* Hub Connection Card */}
-          <Card sx={{ bgcolor: 'background.paper' }}>
-            <CardHeader
-              title="Hub Connection"
-              sx={{
-                borderBottom: 1,
-                borderColor: 'divider',
-                '& .MuiCardHeader-title': { fontSize: '1.1rem' }
-              }}
-            />
-            <CardContent>
-              {subError ? (
-                <Alert severity="error" sx={{ mb: 2 }}>{subError}</Alert>
-              ) : null}
-
-              <TextField
-                id="publishHubUrlInput"
-                fullWidth
-                label="Hub URL"
-                value={hubUrl}
-                onChange={function(e) { setHubUrl(e.target.value); }}
-                disabled={hasSubscriptions}
-                sx={{ mb: 2 }}
-                size="small"
-              />
-
-              <TextField
-                id="publishAuthorizationInput"
-                fullWidth
-                label="Authorization"
-                value={authorization}
-                onChange={function(e) { setAuthorization(e.target.value); }}
-                disabled={hasSubscriptions}
-                placeholder="Bearer eyJhbGciOiJSUzI1..."
-                helperText="Optional. Bearer token or session header for the hub."
-                sx={{ mb: 2 }}
-                size="small"
-              />
-
-              <TextField
-                id="publishTopicInput"
-                fullWidth
-                label="Topic"
-                value={topic}
-                onChange={function(e) { setTopic(e.target.value); }}
-                sx={{ mb: 2 }}
-                size="small"
-              />
-
-              {/* WebSocket status */}
-              {ws.isBound ? (
-                <Alert severity="success" sx={{ mb: 2 }}>
-                  Bound to <strong>{wsEndpoint}</strong>
-                </Alert>
-              ) : connectWebSocket ? (
-                <Alert severity="info" sx={{ mb: 2 }}>
-                  Connecting...
-                </Alert>
-              ) : null}
-
-              <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <Button
-                  id="publishSubscribeButton"
-                  variant="contained"
-                  size="small"
-                  disabled={isSubscribeDisabled || hasSubscriptions}
-                  onClick={handleSubscribe}
-                  startIcon={subStatus === SubscriptionStatus.Subscribing ? <CircularProgress size={16} color="inherit" /> : null}
-                >
-                  {subStatus === SubscriptionStatus.Subscribing ? 'Subscribing...' : 'Subscribe'}
-                </Button>
-              </Box>
-            </CardContent>
-          </Card>
-
-          <SubscriptionList subs={getSubArray()} onUnsubscribe={handleUnsubscribeSub} />
 
           <CollectionsToPublish
             isPublishAllowed={!!hubUrl}
@@ -358,6 +288,87 @@ function FhircastPublishPage() {
             topic={topic}
             onTopicChange={function(val) { setTopic(val); }}
           />
+
+          {/* Hub Connection and Subscriptions — Construction Zone guard */}
+          {get(Meteor, 'settings.public.defaults.sidebar.menuItems.ConstructionZone') ? (
+            <>
+              <Card sx={{ bgcolor: 'background.paper' }}>
+                <CardHeader
+                  title="Hub Connection"
+                  sx={{
+                    borderBottom: 1,
+                    borderColor: 'divider',
+                    '& .MuiCardHeader-title': { fontSize: '1.1rem' }
+                  }}
+                />
+                <CardContent>
+                  {subError ? (
+                    <Alert severity="error" sx={{ mb: 2 }}>{subError}</Alert>
+                  ) : null}
+
+                  <TextField
+                    id="publishHubUrlInput"
+                    fullWidth
+                    label="Hub URL"
+                    value={hubUrl}
+                    onChange={function(e) { setHubUrl(e.target.value); }}
+                    disabled={hasSubscriptions}
+                    sx={{ mb: 2 }}
+                    size="small"
+                  />
+
+                  <TextField
+                    id="publishAuthorizationInput"
+                    fullWidth
+                    label="Authorization"
+                    value={authorization}
+                    onChange={function(e) { setAuthorization(e.target.value); }}
+                    disabled={hasSubscriptions}
+                    placeholder="Bearer eyJhbGciOiJSUzI1..."
+                    helperText="Optional. Bearer token or session header for the hub."
+                    sx={{ mb: 2 }}
+                    size="small"
+                  />
+
+                  <TextField
+                    id="publishTopicInput"
+                    fullWidth
+                    label="Topic"
+                    value={topic}
+                    onChange={function(e) { setTopic(e.target.value); }}
+                    sx={{ mb: 2 }}
+                    size="small"
+                  />
+
+                  {/* WebSocket status */}
+                  {ws.isBound ? (
+                    <Alert severity="success" sx={{ mb: 2 }}>
+                      Bound to <strong>{wsEndpoint}</strong>
+                    </Alert>
+                  ) : connectWebSocket ? (
+                    <Alert severity="info" sx={{ mb: 2 }}>
+                      Connecting...
+                    </Alert>
+                  ) : null}
+
+                  <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <Button
+                      id="publishSubscribeButton"
+                      variant="contained"
+                      size="small"
+                      disabled={isSubscribeDisabled || hasSubscriptions}
+                      onClick={handleSubscribe}
+                      startIcon={subStatus === SubscriptionStatus.Subscribing ? <CircularProgress size={16} color="inherit" /> : null}
+                    >
+                      {subStatus === SubscriptionStatus.Subscribing ? 'Subscribing...' : 'Subscribe'}
+                    </Button>
+                  </Box>
+                </CardContent>
+              </Card>
+
+              <SubscriptionList subs={getSubArray()} onUnsubscribe={handleUnsubscribeSub} />
+            </>
+          ) : null}
         </Box>
 
         {/* Column 2: Hub Events Feed */}
