@@ -23,7 +23,7 @@ function FhircastNavButtons() {
   var location = useLocation();
 
   return (
-    <Box sx={{
+    <Box className="footer-buttons-fhircast" sx={{
       display: 'flex',
       flexDirection: 'row',
       justifyContent: 'space-evenly',
@@ -37,7 +37,7 @@ function FhircastNavButtons() {
         return (
           <Button
             key={route.path}
-            id={'fhircast' + route.label + 'Button'}
+            id={'fhircast-' + route.label.toLowerCase().replace(/\s+/g, '-') + '-footer-btn'}
             variant={isActive ? 'contained' : 'text'}
             color={isActive ? 'secondary' : 'inherit'}
             size="small"

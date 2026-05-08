@@ -25,6 +25,7 @@ function SubscribeButton() {
 
   return (
     <Button
+      id="fhircast-subscribe-footer-btn"
       variant="text"
       color="inherit"
       size="small"
