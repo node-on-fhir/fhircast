@@ -29,13 +29,13 @@
       "topicMode": "patientId"
     },
     "welcome": {
-      "enabled": true,
+      "enabled": false,
       "requireLoggedIn": false,
       "title": "Lattice RIS",
       "message": "Welcome to the Node On FHIR ecosystem's Radiology Information System (RIS), built with first-class FHIR support and the leading web DICOM viewer.",
       "buttonText": "Get Started",
       "imageUrl": "/NodeOnFHIR-NASA-Dark.png",
-      "next": "/getting-started",
+      "next": "/radiology/reading",
       "iconName": ""
     },
     "smartOnFhir": [
